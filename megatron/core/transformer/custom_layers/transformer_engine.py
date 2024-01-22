@@ -468,8 +468,6 @@ class TELayerNormMLP(te.pytorch.LayerNormMLP):
     def __init__(
         self,
         config: TransformerConfig,
-        layer_number: int,
-        normalization: str
         #swiglu
     ):
         self.config = config
@@ -495,20 +493,39 @@ class TELayerNormMLP(te.pytorch.LayerNormMLP):
                 self.config.context_parallel_size == 1
             ), "Only Transformer-Engine version >= 1.0.0 supports context parallelism!"
 
-        if self.config.activation_func == F.SiLu and self.config.gated_linear_unit == True:
+        if (self.config.activation_func == torch.nn.SiLU and self.config.gated_linear_unit == True):
             self.activation = 'swiglu'
         else:
             self.activation = self.config.activation_func
 
-        super().__init__(
+        super().__init__(    
+            hidden_size=self.config.hidden_size,
+            ffn_hidden_size=self.config.ffn_hidden_size,
+            eps=self.config.layernorm_epsilon,
             sequence_parallel=self.config.sequence_parallel,
-            normalization=self.config.normalization, # 'RMSNorm', # see if rmsnorm is supported
-            tp_size=self.config.tensor_model_parallel_size,
-            activation=self.activation, # swiglu
+            return_bias= False, # what should this be?
             get_rng_state_tracker=get_cuda_rng_tracker,
             tp_group=get_tensor_model_parallel_group(check_initialized=False),
-            apply_residual_connection_post_layernorm=self.config.apply_residual_connection_post_layernorm, #: bool = False,
-            layer_number=layer_number,
+            tp_size=self.config.tensor_model_parallel_size,
+            #init_method: Optional[Callable] = None,
+            #bias=False, # what should this be?
+            normalization=self.config.normalization, # 'RMSNorm', # see if rmsnorm is supported
+            activation=self.activation, # swiglu
+            #output_layer_init_method: Optional[Callable] = None,
+            #fuse_wgrad_accumulation: bool = False,:
+            #params_dtype: Optional[torch.dtype] = None,
+            #return_layernorm_output: bool = False,
+            #seq_length: Optional[int] = None,
+            #micro_batch_size= self.config.micro_batch_size,
+            #set_parallel_mode: bool = False,
+            zero_centered_gamma= self.config.layernorm_zero_centered_gamma,
+            #device: Union[torch.device, str] = "cuda",
+            ub_bulk_wgrad = self.config.tp_comm_bulk_wgrad,
+            ub_bulk_dgrad = self.config.tp_comm_bulk_dgrad,
+            ub_split_rs=self.config.tp_comm_split_rs,
+            ub_atomic_gemm_rs = self.config.tp_comm_atomic_rs,
+            ub_split_ag = self.config.tp_comm_split_ag,
+            ub_atomic_gemm_ag= self.config.tp_comm_atomic_ag,
             *extra_kwargs
         )
     def forward(
