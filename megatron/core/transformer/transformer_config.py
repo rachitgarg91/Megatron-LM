@@ -9,7 +9,8 @@ import torch.nn.functional as F
 
 from ..model_parallel_config import ModelParallelConfig
 from ..utils import init_method_normal, scaled_init_method_normal
-
+import transformer_engine.pytorch as te
+import transformer_engine_extensions as tex
 
 @dataclass
 class TransformerConfig(ModelParallelConfig):

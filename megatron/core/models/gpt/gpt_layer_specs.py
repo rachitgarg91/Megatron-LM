@@ -9,6 +9,7 @@ from megatron.core.transformer.custom_layers.transformer_engine import (
     TELayerNormColumnParallelLinear,
     TENorm,
     TERowParallelLinear,
+    TELayerNormMLP,
 )
 from megatron.core.transformer.dot_product_attention import DotProductAttention
 from megatron.core.transformer.enums import AttnMaskType
@@ -42,6 +43,28 @@ def get_gpt_layer_with_transformer_engine_spec(
             self_attn_bda=get_bias_dropout_add,
             pre_mlp_layernorm=TENorm if num_experts else IdentityOp,
             mlp=mlp,
+            mlp_bda=get_bias_dropout_add,
+        ),
+    )
+
+# Use this spec to use lower level Transformer Engine modules (required for fp8 training)
+def get_gpt_layer_with_transformer_engine_and_mlp_te_block_spec() -> ModuleSpec:
+    return ModuleSpec(
+        module=TransformerLayer,
+        submodules=TransformerLayerSubmodules(
+            self_attention=ModuleSpec(
+                module=SelfAttention,
+                params={"attn_mask_type": AttnMaskType.causal},
+                submodules=SelfAttentionSubmodules(
+                    linear_qkv=TELayerNormColumnParallelLinear,
+                    core_attention=TEDotProductAttention,
+                    linear_proj=TERowParallelLinear,
+                ),
+            ),
+            self_attn_bda=get_bias_dropout_add,
+            mlp=ModuleSpec(
+                module=TELayerNormMLP,
+            ),
             mlp_bda=get_bias_dropout_add,
         ),
     )

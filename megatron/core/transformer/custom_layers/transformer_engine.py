@@ -454,6 +454,95 @@ class TEDotProductAttention(te.pytorch.DotProductAttention):
         else:
             return core_attn_out
 
+class TELayerNormMLP(te.pytorch.LayerNormMLP):
+    """
+    Wrapper for the Transformer-Engine's `LayerNormMLP` layer.
+
+    Note that if Megatron's parallel_state has not been initialized yet, the
+    tp_group and cp_group passed to TE will be None and must be set later
+    via set_tensor_parallel_group() and set_context_parallel_group().
+    """
+
+    cp_stream: torch.cuda.Stream = None
+
+    def __init__(
+        self,
+        config: TransformerConfig,
+        layer_number: int,
+        normalization: str
+        #swiglu
+    ):
+        self.config = config
+        self.te_forward_mask_type = False
+
+        extra_kwargs = {}
+        te_version = packaging.version.Version(version("transformer-engine"))
+
+        if te_version > packaging.version.Version("0.12.0"):
+            self.te_forward_mask_type = True
+
+        # Only Transformer-Engine version >= 1.0.0 supports context parallelism
+        if te_version >= packaging.version.Version("1.0.0"):
+            if getattr(TELayerNormMLP, "cp_stream") is None:
+                TELayerNormMLP.cp_stream = torch.cuda.Stream()
+            extra_kwargs["cp_group"] = get_context_parallel_group(check_initialized=False)
+            extra_kwargs["cp_global_ranks"] = get_context_parallel_global_ranks(
+                check_initialized=False
+            )
+            extra_kwargs["cp_stream"] = TELayerNormMLP.cp_stream
+        else:
+            assert (
+                self.config.context_parallel_size == 1
+            ), "Only Transformer-Engine version >= 1.0.0 supports context parallelism!"
+
+        if self.config.activation_func == F.SiLu and self.config.gated_linear_unit == True:
+            self.activation = 'swiglu'
+        else:
+            self.activation = self.config.activation_func
+
+        super().__init__(
+            sequence_parallel=self.config.sequence_parallel,
+            normalization=self.config.normalization, # 'RMSNorm', # see if rmsnorm is supported
+            tp_size=self.config.tensor_model_parallel_size,
+            activation=self.activation, # swiglu
+            get_rng_state_tracker=get_cuda_rng_tracker,
+            tp_group=get_tensor_model_parallel_group(check_initialized=False),
+            apply_residual_connection_post_layernorm=self.config.apply_residual_connection_post_layernorm, #: bool = False,
+            layer_number=layer_number,
+            *extra_kwargs
+        )
+    def forward(
+        self,
+        inp,
+        is_first_microbatch=False,
+    ):
+        return super().forward(
+            self, inp, is_first_microbatch
+        )
+
+''' full TE
+  def forward(
+        self,
+        hidden_states,
+        attention_mask,
+        context=None,
+        context_mask=None,
+        rotary_pos_emb=None,
+        inference_params=None,
+    ):
+        hidden_states = super().forward(
+            hidden_states,
+            attention_mask=attention_mask,
+            encoder_output=context,
+            enc_dec_attn_mask=context_mask,
+            rotary_pos_emb=rotary_pos_emb,
+            inference_params=inference_params
+        )
+        context = None
+        # TODO @sudhakars: why does TE's TransformerLayer not return any
+        # `context`.
+        return hidden_states, context
+'''
 
 try:
 
