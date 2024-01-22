@@ -463,7 +463,7 @@ class TELayerNormMLP(te.pytorch.LayerNormMLP):
     via set_tensor_parallel_group() and set_context_parallel_group().
     """
 
-    cp_stream: torch.cuda.Stream = None
+    #cp_stream: torch.cuda.Stream = None
 
     def __init__(
         self,
@@ -480,18 +480,18 @@ class TELayerNormMLP(te.pytorch.LayerNormMLP):
             self.te_forward_mask_type = True
 
         # Only Transformer-Engine version >= 1.0.0 supports context parallelism
-        if te_version >= packaging.version.Version("1.0.0"):
-            if getattr(TELayerNormMLP, "cp_stream") is None:
-                TELayerNormMLP.cp_stream = torch.cuda.Stream()
-            extra_kwargs["cp_group"] = get_context_parallel_group(check_initialized=False)
-            extra_kwargs["cp_global_ranks"] = get_context_parallel_global_ranks(
-                check_initialized=False
-            )
-            extra_kwargs["cp_stream"] = TELayerNormMLP.cp_stream
-        else:
-            assert (
-                self.config.context_parallel_size == 1
-            ), "Only Transformer-Engine version >= 1.0.0 supports context parallelism!"
+        #if te_version >= packaging.version.Version("1.0.0"):
+            #if getattr(TELayerNormMLP, "cp_stream") is None:
+            #    TELayerNormMLP.cp_stream = torch.cuda.Stream()
+            #extra_kwargs["cp_group"] = get_context_parallel_group(check_initialized=False)
+            #extra_kwargs["cp_global_ranks"] = get_context_parallel_global_ranks(
+            #    check_initialized=False
+            #)
+            #extra_kwargs["cp_stream"] = TELayerNormMLP.cp_stream
+        #else:
+        #    assert (
+        #        self.config.context_parallel_size == 1
+        #    ), "Only Transformer-Engine version >= 1.0.0 supports context parallelism!"
 
         if (self.config.activation_func == torch.nn.SiLU and self.config.gated_linear_unit == True):
             self.activation = 'swiglu'
@@ -526,7 +526,7 @@ class TELayerNormMLP(te.pytorch.LayerNormMLP):
             ub_atomic_gemm_rs = self.config.tp_comm_atomic_rs,
             ub_split_ag = self.config.tp_comm_split_ag,
             ub_atomic_gemm_ag= self.config.tp_comm_atomic_ag,
-            *extra_kwargs
+            **extra_kwargs
         )
     def forward(
         self,
